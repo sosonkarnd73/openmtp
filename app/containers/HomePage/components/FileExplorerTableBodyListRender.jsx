@@ -44,6 +44,25 @@ class FileExplorerTableBodyListRender extends PureComponent {
     );
   };
 
+  RenderSize = () => {
+    const { classes: styles, item } = this.props;
+
+    if (!item.isFolder) {
+      return Number.isFinite(item.size) ? niceBytes(item.size) : '--';
+    }
+
+    switch (item.dirSizeStatus) {
+      case 'done':
+        return niceBytes(item.dirSize);
+
+      case 'loading':
+        return <span className={styles.sizePending}>Calculating…</span>;
+
+      default:
+        return '--';
+    }
+  };
+
   render() {
     const {
       classes: styles,
@@ -58,7 +77,7 @@ class FileExplorerTableBodyListRender extends PureComponent {
       onTableDoubleClick,
     } = this.props;
 
-    const { RenderFileIcon, RenderFolderIcon } = this;
+    const { RenderFileIcon, RenderFolderIcon, RenderSize } = this;
 
     const fileName = springTruncate(
       item.name,
@@ -144,7 +163,7 @@ class FileExplorerTableBodyListRender extends PureComponent {
               onTableDoubleClick(item, deviceType, event)
             }
           >
-            {item.isFolder ? `--` : `${niceBytes(item.size)}`}
+            <RenderSize />
           </TableCell>
         )}
         {hideColList.indexOf('dateAdded') < 0 && (

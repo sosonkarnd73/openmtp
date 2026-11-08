@@ -45,7 +45,7 @@ import {
   reloadDirList,
 } from '../actions';
 import {
-  makeDirectoryLists,
+  makeVisibleDirectoryLists,
   makeCurrentBrowsePath,
   makeMtpDevice,
   makeContextMenuList,
@@ -1952,7 +1952,8 @@ class FileExplorer extends Component {
 
   _lodashSortConstraints = ({ value, orderBy }) => {
     if (orderBy === 'size' && value.isFolder) {
-      return 0;
+      // folders whose size is still unknown sort before the smallest folder
+      return value.dirSizeStatus === 'done' ? value.dirSize : -1;
     }
 
     const item = value[orderBy];
@@ -2755,7 +2756,8 @@ const mapStateToProps = (state, _) => {
   return {
     currentBrowsePath: makeCurrentBrowsePath(state),
     mtpDevice: makeMtpDevice(state),
-    directoryLists: makeDirectoryLists(state),
+    // the listing as displayed: search applied, folder sizes merged in
+    directoryLists: makeVisibleDirectoryLists(state),
     hideHiddenFiles: makeHideHiddenFiles(state),
     isStatusBarEnabled: makeEnableStatusBar(state),
     contextMenuList: makeContextMenuList(state),

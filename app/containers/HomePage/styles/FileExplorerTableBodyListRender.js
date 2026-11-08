@@ -50,5 +50,9 @@ export const styles = (_) => {
       maxWidth: 310,
       whiteSpace: 'nowrap',
     },
+    sizePending: {
+      opacity: 0.55,
+      fontStyle: 'italic',
+    },
   };
 };
