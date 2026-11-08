@@ -377,6 +377,58 @@ class FileExplorerController {
   };
 
   /**
+   * description - List a single directory for background work (folder sizes,
+   * recursive search). No analytics, no alerts; MTP calls yield to any
+   * user-initiated MTP call.
+   *
+   * @param {string} deviceType
+   * @param {string} filePath
+   * @param {boolean} ignoreHidden
+   * @param {number|null} storageId
+   * @param {string} walkRoot
+   * @param {boolean} allowPermissionPrompt
+   * @return {Promise<{data: array|null, error: *}>}
+   */
+  listFilesInBackground({
+    deviceType,
+    filePath,
+    ignoreHidden,
+    storageId,
+    walkRoot,
+    allowPermissionPrompt = false,
+  }) {
+    checkIf(deviceType, 'inObjectValues', DEVICE_TYPE);
+    checkIf(filePath, 'string');
+    checkIf(ignoreHidden, 'boolean');
+
+    const run = () =>
+      this.repository.listFilesInBackground({
+        deviceType,
+        filePath,
+        ignoreHidden,
+        storageId,
+        walkRoot,
+        allowPermissionPrompt,
+      });
+
+    if (deviceType === DEVICE_TYPE.mtp) {
+      return mtpAccessGate.runBackground(run);
+    }
+
+    return run();
+  }
+
+  /**
+   * description - Build a full local file explorer node for a path
+   *
+   * @param {string} fullPath
+   * @return {Promise<object|null>}
+   */
+  buildLocalNode({ fullPath }) {
+    return this.repository.buildLocalNode({ fullPath });
+  }
+
+  /**
    * description: fetch the data for generating bug/error reports
    *
    * @param {string} deviceType
