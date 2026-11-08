@@ -34,6 +34,10 @@ export const fileExplorerKeymaps = {
     label: `Select All`,
     keys: ['command+a'],
   },
+  search: {
+    label: `Search`,
+    keys: ['command+f'],
+  },
   rename: {
     label: `Rename`,
     keys: ['command+d'],

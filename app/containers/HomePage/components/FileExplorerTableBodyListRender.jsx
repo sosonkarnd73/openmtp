@@ -44,6 +44,54 @@ class FileExplorerTableBodyListRender extends PureComponent {
     );
   };
 
+  RenderSize = () => {
+    const { classes: styles, item } = this.props;
+
+    if (!item.isFolder) {
+      return Number.isFinite(item.size) ? niceBytes(item.size) : '--';
+    }
+
+    switch (item.dirSizeStatus) {
+      case 'done':
+        return niceBytes(item.dirSize);
+
+      case 'loading':
+        return <span className={styles.sizePending}>Calculating…</span>;
+
+      default:
+        return '--';
+    }
+  };
+
+  RenderName = ({ fileName }) => {
+    const { classes: styles, item } = this.props;
+
+    const name = fileName.isTruncated ? (
+      <Tooltip title={fileName.text}>
+        <div className={styles.truncate}>{fileName.truncatedText}</div>
+      </Tooltip>
+    ) : (
+      fileName.text
+    );
+
+    // recursive search results: show where the item lives
+    if (typeof item.searchParent !== 'string') {
+      return name;
+    }
+
+    const parentText =
+      item.searchParent === '' ? 'in this folder' : `in ${item.searchParent}`;
+
+    return (
+      <div className={styles.searchResultName}>
+        <div>{name}</div>
+        <div className={styles.searchResultParent} title={item.path}>
+          {parentText}
+        </div>
+      </div>
+    );
+  };
+
   render() {
     const {
       classes: styles,
@@ -58,7 +106,7 @@ class FileExplorerTableBodyListRender extends PureComponent {
       onTableDoubleClick,
     } = this.props;
 
-    const { RenderFileIcon, RenderFolderIcon } = this;
+    const { RenderFileIcon, RenderFolderIcon, RenderSize, RenderName } = this;
 
     const fileName = springTruncate(
       item.name,
@@ -118,13 +166,7 @@ class FileExplorerTableBodyListRender extends PureComponent {
           >
             {item.isFolder ? <RenderFolderIcon /> : <RenderFileIcon />}
             &nbsp;&nbsp;
-            {fileName.isTruncated ? (
-              <Tooltip title={fileName.text}>
-                <div className={styles.truncate}>{fileName.truncatedText}</div>
-              </Tooltip>
-            ) : (
-              fileName.text
-            )}
+            <RenderName fileName={fileName} />
           </TableCell>
         )}
         {hideColList.indexOf('size') < 0 && (
@@ -144,7 +186,7 @@ class FileExplorerTableBodyListRender extends PureComponent {
               onTableDoubleClick(item, deviceType, event)
             }
           >
-            {item.isFolder ? `--` : `${niceBytes(item.size)}`}
+            <RenderSize />
           </TableCell>
         )}
         {hideColList.indexOf('dateAdded') < 0 && (

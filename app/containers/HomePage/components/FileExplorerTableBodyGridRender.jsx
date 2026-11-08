@@ -95,6 +95,8 @@ class FileExplorerTableBodyGridRender extends PureComponent {
         className={classNames(styles.itemWrapper, {
           [styles.itemSelected]: isSelected,
         })}
+        // recursive search results: show where the item lives on hover
+        title={typeof item.searchParent === 'string' ? item.path : undefined}
         onDoubleClick={(event) => onTableDoubleClick(item, deviceType, event)}
         onContextMenu={(event) =>
           onContextMenuClick(event, { ...item }, { ...tableData }, _eventTarget)

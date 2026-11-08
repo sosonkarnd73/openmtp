@@ -17,6 +17,7 @@ import {
   getSelectedStorageIdFromState,
   reloadDirList,
   getSelectedStorage,
+  toggleSearch,
 } from '../actions';
 import {
   makeDirectoryLists,
@@ -26,6 +27,7 @@ import {
   makeToolbarList,
   makeCurrentBrowsePath,
   makeFocussedFileExplorerDeviceType,
+  makeSearch,
 } from '../selectors';
 import {
   makeAppThemeMode,
@@ -237,6 +239,8 @@ class ToolbarAreaPane extends PureComponent {
       deviceType,
       hideHiddenFiles,
       actionCreateReloadDirList,
+      actionCreateToggleSearch,
+      search,
     } = this.props;
 
     let filePath = '/';
@@ -268,6 +272,10 @@ class ToolbarAreaPane extends PureComponent {
           {}
         );
 
+        break;
+
+      case 'search':
+        actionCreateToggleSearch(!search[deviceType].isOpen, deviceType);
         break;
 
       case 'delete':
@@ -571,6 +579,9 @@ const mapDispatchToProps = (dispatch, _) =>
       actionCreateToggleSettings: (data) => (_, __) => {
         dispatch(toggleSettings(data));
       },
+      actionCreateToggleSearch: (isOpen, deviceType) => (_, __) => {
+        dispatch(toggleSearch(isOpen, deviceType));
+      },
     },
     dispatch
   );
@@ -588,6 +599,7 @@ const mapStateToProps = (state, __) => {
     appThemeMode: makeAppThemeMode(state),
     mtpMode: makeMtpMode(state),
     showLocalPaneOnLeftSide: makeShowLocalPaneOnLeftSide(state),
+    search: makeSearch(state),
   };
 };
 

@@ -43,9 +43,13 @@ import {
   disposeMtp,
   actionSetMtpStatus,
   reloadDirList,
+  toggleSearch,
+  setSearchQuery,
+  setSearchIncludeSubfolders,
 } from '../actions';
 import {
-  makeDirectoryLists,
+  makeVisibleDirectoryLists,
+  makeSearch,
   makeCurrentBrowsePath,
   makeMtpDevice,
   makeContextMenuList,
@@ -115,6 +119,7 @@ import {
 import { fileExistsSync } from '../../../helpers/fileOps';
 import { getRemoteWindow } from '../../../helpers/remoteWindowHelpers';
 import { IpcEvents } from '../../../services/ipc-events/IpcEventType';
+import { FILE_EXPLORER_BODY_WRAPPER_ID } from '../../../constants/dom';
 
 const remote = getRemoteWindow();
 const { Menu, getCurrentWindow } = remote;
@@ -202,6 +207,9 @@ class FileExplorer extends Component {
         },
       },
       directoryGeneratedTime: Date.now(),
+
+      // bumped to ask the search bar to (re)focus its input
+      searchFocusRequest: 0,
     };
 
     this.state = {
@@ -679,6 +687,10 @@ class FileExplorer extends Component {
     }
 
     switch (type) {
+      case 'search':
+        this._handleOpenSearch();
+        break;
+
       case 'newFolder':
         this._handleToggleDialogBox(
           { toggle: true, data: { ...tableData } },
@@ -1952,7 +1964,8 @@ class FileExplorer extends Component {
 
   _lodashSortConstraints = ({ value, orderBy }) => {
     if (orderBy === 'size' && value.isFolder) {
-      return 0;
+      // folders whose size is still unknown sort before the smallest folder
+      return value.dirSizeStatus === 'done' ? value.dirSize : -1;
     }
 
     const item = value[orderBy];
@@ -1979,6 +1992,39 @@ class FileExplorer extends Component {
     return _primer;
   };
 
+  _handleOpenSearch = () => {
+    const { actionCreateToggleSearch, deviceType } = this.props;
+
+    actionCreateToggleSearch(true, deviceType);
+
+    this.setState(({ searchFocusRequest }) => ({
+      searchFocusRequest: searchFocusRequest + 1,
+    }));
+  };
+
+  _handleCloseSearch = () => {
+    const { actionCreateToggleSearch, deviceType } = this.props;
+
+    actionCreateToggleSearch(false, deviceType);
+
+    // hand keyboard focus back to the file list
+    document
+      .getElementById(`${FILE_EXPLORER_BODY_WRAPPER_ID}-${deviceType}`)
+      ?.focus();
+  };
+
+  _handleSearchQueryChange = (query) => {
+    const { actionCreateSetSearchQuery, deviceType } = this.props;
+
+    actionCreateSetSearchQuery(query, deviceType);
+  };
+
+  _handleSearchIncludeSubfoldersChange = (includeSubfolders) => {
+    const { actionCreateSetSearchIncludeSubfolders, deviceType } = this.props;
+
+    actionCreateSetSearchIncludeSubfolders(includeSubfolders, deviceType);
+  };
+
   _handleDirectoryGeneratedTime = () => {
     this.setState({
       directoryGeneratedTime: Date.now(),
@@ -1998,9 +2044,14 @@ class FileExplorer extends Component {
       fileExplorerListingType,
       isStatusBarEnabled,
       fileTransferClipboard,
+      search,
     } = this.props;
-    const { toggleDialog, togglePasteConfirmDialog, directoryGeneratedTime } =
-      this.state;
+    const {
+      toggleDialog,
+      togglePasteConfirmDialog,
+      directoryGeneratedTime,
+      searchFocusRequest,
+    } = this.state;
     const { rename, newFolder } = toggleDialog;
     const togglePasteDialog =
       deviceType === DEVICE_TYPE.mtp && fileTransferProgess.toggle;
@@ -2168,6 +2219,13 @@ class FileExplorer extends Component {
           tableSort={this.tableSort}
           isStatusBarEnabled={isStatusBarEnabled}
           directoryGeneratedTime={directoryGeneratedTime}
+          search={search[deviceType]}
+          searchFocusRequest={searchFocusRequest}
+          onSearchQueryChange={this._handleSearchQueryChange}
+          onSearchIncludeSubfoldersChange={
+            this._handleSearchIncludeSubfoldersChange
+          }
+          onSearchClose={this._handleCloseSearch}
           onHoverDropZoneActivate={this._handleonHoverDropZoneActivate}
           onFilesDragOver={this._handleFilesDragOver}
           onFilesDragEnd={this._handleFilesDragEnd}
@@ -2269,6 +2327,19 @@ const mapDispatchToProps = (dispatch, _) =>
         ({ ...args }, deviceType) =>
         (_, getState) => {
           dispatch(listDirectory({ ...args }, deviceType, getState));
+        },
+
+      actionCreateToggleSearch: (isOpen, deviceType) => (_, __) => {
+        dispatch(toggleSearch(isOpen, deviceType));
+      },
+
+      actionCreateSetSearchQuery: (query, deviceType) => (_, __) => {
+        dispatch(setSearchQuery(query, deviceType));
+      },
+
+      actionCreateSetSearchIncludeSubfolders:
+        (includeSubfolders, deviceType) => (_, __) => {
+          dispatch(setSearchIncludeSubfolders(includeSubfolders, deviceType));
         },
 
       actionCreateReloadDirList:
@@ -2755,7 +2826,9 @@ const mapStateToProps = (state, _) => {
   return {
     currentBrowsePath: makeCurrentBrowsePath(state),
     mtpDevice: makeMtpDevice(state),
-    directoryLists: makeDirectoryLists(state),
+    // the listing as displayed: search applied, folder sizes merged in
+    directoryLists: makeVisibleDirectoryLists(state),
+    search: makeSearch(state),
     hideHiddenFiles: makeHideHiddenFiles(state),
     isStatusBarEnabled: makeEnableStatusBar(state),
     contextMenuList: makeContextMenuList(state),

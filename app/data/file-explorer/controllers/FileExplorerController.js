@@ -9,10 +9,25 @@ import {
 import { getMtpModeSetting } from '../../../helpers/settings';
 import { DEVICE_TYPE } from '../../../enums';
 import { unixTimestampNow } from '../../../utils/date';
+import { mtpAccessGate } from '../../../utils/mtpAccessGate';
+import { folderSizeCache } from '../services/folderSizeCache';
 
 class FileExplorerController {
   constructor() {
     this.repository = new FileExplorerRepository();
+  }
+
+  /**
+   * MTP calls go through [mtpAccessGate] so that background work (folder
+   * sizes, recursive search) never drives the device concurrently with
+   * user-initiated actions.
+   */
+  _foreground(deviceType, fn) {
+    if (deviceType === DEVICE_TYPE.mtp) {
+      return mtpAccessGate.runForeground(fn);
+    }
+
+    return fn();
   }
 
   async _sentEvent({ result, deviceType, eventKey, attachData = false }) {
@@ -129,7 +144,9 @@ class FileExplorerController {
   async initialize({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.initialize({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.initialize({ deviceType })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'INITIALIZE' });
 
@@ -144,7 +161,9 @@ class FileExplorerController {
   async dispose({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.dispose({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.dispose({ deviceType })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'DISPOSE' });
 
@@ -159,7 +178,9 @@ class FileExplorerController {
   async listStorages({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.listStorages({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.listStorages({ deviceType })
+    );
 
     this._sentEvent({
       result,
@@ -185,12 +206,14 @@ class FileExplorerController {
     checkIf(filePath, 'string');
     checkIf(ignoreHidden, 'boolean');
 
-    const result = await this.repository.listFiles({
-      deviceType,
-      filePath,
-      ignoreHidden,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.listFiles({
+        deviceType,
+        filePath,
+        ignoreHidden,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'LIST_FILES' });
 
@@ -211,12 +234,16 @@ class FileExplorerController {
     checkIf(filePath, 'string');
     checkIf(newFilename, 'string');
 
-    const result = await this.repository.renameFile({
-      deviceType,
-      filePath,
-      newFilename,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.renameFile({
+        deviceType,
+        filePath,
+        newFilename,
+        storageId,
+      })
+    );
+
+    folderSizeCache.invalidate(deviceType);
 
     this._sentEvent({ result, deviceType, eventKey: 'RENAME_FILE' });
 
@@ -235,11 +262,15 @@ class FileExplorerController {
     checkIf(deviceType, 'string');
     checkIf(fileList, 'array');
 
-    const result = await this.repository.deleteFiles({
-      deviceType,
-      fileList,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.deleteFiles({
+        deviceType,
+        fileList,
+        storageId,
+      })
+    );
+
+    folderSizeCache.invalidate(deviceType);
 
     this._sentEvent({ result, deviceType, eventKey: 'DELETE_FILE' });
 
@@ -258,11 +289,15 @@ class FileExplorerController {
     checkIf(deviceType, 'string');
     checkIf(filePath, 'string');
 
-    const result = await this.repository.makeDirectory({
-      deviceType,
-      filePath,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.makeDirectory({
+        deviceType,
+        filePath,
+        storageId,
+      })
+    );
+
+    folderSizeCache.invalidate(deviceType);
 
     this._sentEvent({ result, deviceType, eventKey: 'NEW_FOLDER' });
 
@@ -281,11 +316,13 @@ class FileExplorerController {
     checkIf(deviceType, 'string');
     checkIf(fileList, 'array');
 
-    const result = await this.repository.filesExist({
-      deviceType,
-      fileList,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.filesExist({
+        deviceType,
+        fileList,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'FILES_EXIST' });
 
@@ -327,22 +364,106 @@ class FileExplorerController {
     checkIf(onProgress, 'function');
     checkIf(onCompleted, 'function');
 
-    const result = await this.repository.transferFiles({
-      deviceType,
-      destination,
-      fileList,
-      direction,
-      storageId,
-      onError,
-      onProgress,
-      onCompleted,
-      onPreprocess,
-    });
+    // A transfer changes the contents of both sides. The data sources call
+    // [onCompleted]/[onError] *before* the returned promise resolves, and the
+    // UI re-lists the destination from those callbacks, so the folder size
+    // cache has to be invalidated inside them, not only after the await.
+    let callbackFired = false;
+    const invalidateFolderSizes = () => {
+      folderSizeCache.invalidate(DEVICE_TYPE.local);
+      folderSizeCache.invalidate(DEVICE_TYPE.mtp);
+    };
+
+    invalidateFolderSizes();
+
+    const result = await this._foreground(deviceType, () =>
+      this.repository.transferFiles({
+        deviceType,
+        destination,
+        fileList,
+        direction,
+        storageId,
+        onError: (...args) => {
+          // a failed transfer may still have copied some of the files
+          callbackFired = true;
+          invalidateFolderSizes();
+
+          return onError(...args);
+        },
+        onProgress,
+        onCompleted: (...args) => {
+          callbackFired = true;
+          invalidateFolderSizes();
+
+          return onCompleted(...args);
+        },
+        onPreprocess,
+      })
+    );
+
+    // Some failures resolve without calling either callback. Otherwise don't
+    // invalidate again: that would discard the fresh sizes the post-transfer
+    // listing (started from the callback) is computing right now.
+    if (!callbackFired) {
+      invalidateFolderSizes();
+    }
 
     this._sentEvent({ result, deviceType, eventKey: 'TRANSFER_FILES' });
 
     return result;
   };
+
+  /**
+   * description - List a single directory for background work (folder sizes,
+   * recursive search). No analytics, no alerts; MTP calls yield to any
+   * user-initiated MTP call.
+   *
+   * @param {string} deviceType
+   * @param {string} filePath
+   * @param {boolean} ignoreHidden
+   * @param {number|null} storageId
+   * @param {string} walkRoot
+   * @param {boolean} allowPermissionPrompt
+   * @return {Promise<{data: array|null, error: *}>}
+   */
+  listFilesInBackground({
+    deviceType,
+    filePath,
+    ignoreHidden,
+    storageId,
+    walkRoot,
+    allowPermissionPrompt = false,
+  }) {
+    checkIf(deviceType, 'inObjectValues', DEVICE_TYPE);
+    checkIf(filePath, 'string');
+    checkIf(ignoreHidden, 'boolean');
+
+    const run = () =>
+      this.repository.listFilesInBackground({
+        deviceType,
+        filePath,
+        ignoreHidden,
+        storageId,
+        walkRoot,
+        allowPermissionPrompt,
+      });
+
+    if (deviceType === DEVICE_TYPE.mtp) {
+      return mtpAccessGate.runBackground(run);
+    }
+
+    return run();
+  }
+
+  /**
+   * description - Build a full local file explorer node for a path
+   *
+   * @param {string} fullPath
+   * @return {Promise<object|null>}
+   */
+  buildLocalNode({ fullPath }) {
+    return this.repository.buildLocalNode({ fullPath });
+  }
 
   /**
    * description: fetch the data for generating bug/error reports
@@ -353,7 +474,9 @@ class FileExplorerController {
   async fetchDebugReport({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.fetchDebugReport({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.fetchDebugReport({ deviceType })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'FETCH_DEBUG_REPORT' });
 

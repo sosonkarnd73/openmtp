@@ -1,4 +1,5 @@
 import { mixins } from '../../../styles/js';
+import { SEARCH_BAR_HEIGHT } from './FileExplorerSearchBar';
 
 export const styles = (theme) => ({
   root: {
@@ -17,6 +18,12 @@ export const styles = (theme) => ({
     },
     [`&.statusBarActive`]: {
       height: `calc(100vh - 150px) !important`,
+    },
+    [`&.searchBarActive`]: {
+      height: `calc(100vh - ${120 + SEARCH_BAR_HEIGHT}px)`,
+    },
+    [`&.statusBarActive.searchBarActive`]: {
+      height: `calc(100vh - ${150 + SEARCH_BAR_HEIGHT}px) !important`,
     },
   },
 });

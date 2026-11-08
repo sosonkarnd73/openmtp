@@ -6,6 +6,7 @@ import {
   faPlug,
   faArrowLeft,
   faQuestionCircle,
+  faSearch,
 } from '@fortawesome/free-solid-svg-icons';
 import { faGithub, faPaypal } from '@fortawesome/free-brands-svg-icons';
 import { actionTypes } from './actions';
@@ -20,6 +21,23 @@ import {
   supportUsingPayPal,
 } from '../../templates/fileExplorer';
 import { isKalamModeSupported } from '../../helpers/binaries';
+
+export const initialSearchState = {
+  isOpen: false,
+  query: '',
+  includeSubfolders: false,
+
+  /**
+   * 'idle' | 'searching' | 'done' | 'error'
+   * applies to the recursive (include subfolders) search only
+   */
+  status: 'idle',
+
+  // path the recursive search ran from; null when no recursive results exist
+  rootPath: null,
+  results: [],
+  truncated: false,
+};
 
 export const initialState = {
   focussedFileExplorerDeviceType: {
@@ -76,6 +94,11 @@ export const initialState = {
         label: 'Refresh',
         icon: faSync,
       },
+      search: {
+        enabled: true,
+        label: 'Search',
+        icon: faSearch,
+      },
       delete: {
         enabled: true,
         label: 'Delete',
@@ -107,6 +130,11 @@ export const initialState = {
         enabled: true,
         label: 'Refresh',
         icon: faSync,
+      },
+      search: {
+        enabled: true,
+        label: 'Search',
+        icon: faSearch,
       },
       delete: {
         enabled: true,
@@ -161,6 +189,28 @@ export const initialState = {
       nodes: [],
       isLoaded: false,
     },
+  },
+
+  search: {
+    [DEVICE_TYPE.local]: { ...initialSearchState },
+    [DEVICE_TYPE.mtp]: { ...initialSearchState },
+  },
+
+  /**
+   * description - recursive sizes of the folders in the current listing
+   *
+   *    {
+   *      [deviceType]: {
+   *        [folderPath]: {
+   *          status: 'loading' | 'done' | 'unavailable',
+   *          size: number | undefined,
+   *        }
+   *      }
+   *    }
+   */
+  folderSizes: {
+    [DEVICE_TYPE.local]: {},
+    [DEVICE_TYPE.mtp]: {},
   },
 
   currentBrowsePath: {
@@ -353,6 +403,51 @@ export default function Home(state = initialState, action) {
             ...state.directoryLists[deviceType],
             nodes: [...payload.nodes],
             isLoaded: payload.isLoaded,
+          },
+        },
+      };
+
+    case actionTypes.SET_SEARCH:
+      return {
+        ...state,
+        search: {
+          ...state.search,
+          [deviceType]: {
+            ...state.search[deviceType],
+            ...payload,
+          },
+        },
+      };
+
+    case actionTypes.APPEND_SEARCH_RESULTS:
+      return {
+        ...state,
+        search: {
+          ...state.search,
+          [deviceType]: {
+            ...state.search[deviceType],
+            results: [...state.search[deviceType].results, ...payload],
+          },
+        },
+      };
+
+    case actionTypes.RESET_FOLDER_SIZES:
+      return {
+        ...state,
+        folderSizes: {
+          ...state.folderSizes,
+          [deviceType]: { ...payload },
+        },
+      };
+
+    case actionTypes.UPDATE_FOLDER_SIZES:
+      return {
+        ...state,
+        folderSizes: {
+          ...state.folderSizes,
+          [deviceType]: {
+            ...state.folderSizes[deviceType],
+            ...payload,
           },
         },
       };

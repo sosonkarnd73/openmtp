@@ -122,6 +122,54 @@ export class FileExplorerRepository {
   }
 
   /**
+   * description - List a single directory for background work (folder size
+   * computation, recursive search). Local listings never trigger permission
+   * prompts and don't follow symlinks.
+   *
+   * @param {string} deviceType
+   * @param {string} filePath
+   * @param {boolean} ignoreHidden
+   * @param {number|null} storageId
+   * @param {string} walkRoot
+   * @param {boolean} allowPermissionPrompt
+   * @return {Promise<{data: array|null, error: *}>}
+   */
+  async listFilesInBackground({
+    deviceType,
+    filePath,
+    ignoreHidden,
+    storageId,
+    walkRoot,
+    allowPermissionPrompt = false,
+  }) {
+    if (deviceType === DEVICE_TYPE.mtp) {
+      return this.listFiles({ deviceType, filePath, ignoreHidden, storageId });
+    }
+
+    const result = await this.localDataSource.listEntriesInBackground({
+      filePath,
+      walkRoot,
+      allowPermissionPrompt,
+    });
+
+    if (result.data && ignoreHidden) {
+      result.data = result.data.filter((a) => !a.name.startsWith('.'));
+    }
+
+    return result;
+  }
+
+  /**
+   * description - Build a full local file explorer node for a path
+   *
+   * @param {string} fullPath
+   * @return {Promise<object|null>}
+   */
+  buildLocalNode({ fullPath }) {
+    return this.localDataSource.buildNode({ fullPath });
+  }
+
+  /**
    * description - Rename a file
    *
    * @param deviceType

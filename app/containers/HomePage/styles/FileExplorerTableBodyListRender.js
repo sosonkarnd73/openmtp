@@ -50,5 +50,22 @@ export const styles = (_) => {
       maxWidth: 310,
       whiteSpace: 'nowrap',
     },
+    sizePending: {
+      opacity: 0.55,
+      fontStyle: 'italic',
+    },
+    searchResultName: {
+      display: 'flex',
+      flexDirection: 'column',
+      minWidth: 0,
+    },
+    searchResultParent: {
+      fontSize: 11,
+      opacity: 0.6,
+      textOverflow: 'ellipsis',
+      overflow: 'hidden',
+      maxWidth: 310,
+      whiteSpace: 'nowrap',
+    },
   };
 };
