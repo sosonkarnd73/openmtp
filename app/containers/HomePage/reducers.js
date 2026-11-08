@@ -6,6 +6,7 @@ import {
   faPlug,
   faArrowLeft,
   faQuestionCircle,
+  faSearch,
 } from '@fortawesome/free-solid-svg-icons';
 import { faGithub, faPaypal } from '@fortawesome/free-brands-svg-icons';
 import { actionTypes } from './actions';
@@ -93,6 +94,11 @@ export const initialState = {
         label: 'Refresh',
         icon: faSync,
       },
+      search: {
+        enabled: true,
+        label: 'Search',
+        icon: faSearch,
+      },
       delete: {
         enabled: true,
         label: 'Delete',
@@ -124,6 +130,11 @@ export const initialState = {
         enabled: true,
         label: 'Refresh',
         icon: faSync,
+      },
+      search: {
+        enabled: true,
+        label: 'Search',
+        icon: faSearch,
       },
       delete: {
         enabled: true,

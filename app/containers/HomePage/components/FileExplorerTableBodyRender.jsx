@@ -2,6 +2,9 @@ import React, { PureComponent } from 'react';
 import { withStyles } from '@material-ui/core/styles';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
+import TableRow from '@material-ui/core/TableRow';
+import TableCell from '@material-ui/core/TableCell';
+import Typography from '@material-ui/core/Typography';
 import FileExplorerTableHeadRender from './FileExplorerTableHeadRender';
 import FileExplorerTableEmptyRowRender from './FileExplorerTableBodyEmptyRender';
 import FileExplorerTableBodyGridWrapperRender from './FileExplorerTableBodyGridWrapperRender';
@@ -71,11 +74,15 @@ class FileExplorerTableBodyRender extends PureComponent {
       onContextMenuClick,
       onIsDraggable,
       onDragStart,
+      searchEmptyText: searchEmptyTextProp,
     } = this.props;
     const { nodes, order, orderBy, queue } = directoryLists[deviceType];
     const { selected } = queue;
     const emptyRows = nodes.length < 1;
     const isMtp = deviceType === DEVICE_TYPE.mtp;
+    // the "device not connected" help takes precedence over search messages
+    const searchEmptyText =
+      isMtp && !mtpDevice.isAvailable ? null : searchEmptyTextProp;
 
     return (
       <Table className={styles.table}>
@@ -96,7 +103,14 @@ class FileExplorerTableBodyRender extends PureComponent {
             });
           }}
         >
-          {emptyRows ? (
+          {emptyRows && searchEmptyText && (
+            <TableRow>
+              <TableCell colSpan={6} className={styles.searchEmptyCell}>
+                <Typography variant="body2">{searchEmptyText}</Typography>
+              </TableCell>
+            </TableRow>
+          )}
+          {emptyRows && !searchEmptyText && (
             <FileExplorerTableEmptyRowRender
               mtpDevice={mtpDevice}
               isMtp={isMtp}
@@ -105,9 +119,9 @@ class FileExplorerTableBodyRender extends PureComponent {
               directoryLists={directoryLists}
               onContextMenuClick={onContextMenuClick}
             />
-          ) : (
-            this.ListingSwitcher(fileExplorerListingType[deviceType])
           )}
+          {!emptyRows &&
+            this.ListingSwitcher(fileExplorerListingType[deviceType])}
         </TableBody>
       </Table>
     );

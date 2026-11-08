@@ -65,6 +65,13 @@ export default class ToolbarAreaPane extends PureComponent {
           };
           break;
 
+        case 'search':
+          _activeToolbarList[a] = {
+            ...item,
+            enabled: enabled && (!isMtp || mtpDevice.isAvailable),
+          };
+          break;
+
         case 'delete':
           _activeToolbarList[a] = {
             ...item,

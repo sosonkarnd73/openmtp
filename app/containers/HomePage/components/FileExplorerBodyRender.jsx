@@ -5,6 +5,7 @@ import classNames from 'classnames';
 import hotkeys from 'hotkeys-js';
 import FileExplorerTableBodyRender from './FileExplorerTableBodyRender';
 import FileExplorerTableFooterRender from './FileExplorerTableFooterRender';
+import FileExplorerSearchBar from './FileExplorerSearchBar';
 import { styles } from '../styles/FileExplorerBodyRender';
 import { fileExplorerKeymaps } from '../../../constants/keymaps';
 import {
@@ -59,6 +60,7 @@ class FileExplorerBodyRender extends PureComponent {
       refresh: this.acceleratorCreateAction,
       up: this.acceleratorCreateAction,
       selectAll: this.acceleratorCreateAction,
+      search: this.acceleratorCreateAction,
       rename: this.acceleratorRename,
       open: this.acceleratorCreateAction,
       fileExplorerTabSwitch: this.acceleratorFileExplorerTabSwitch,
@@ -157,9 +159,13 @@ class FileExplorerBodyRender extends PureComponent {
       _focussedFileExplorerDeviceType = deviceType;
     }
 
+    // don't steal the focus from text inputs inside the pane (eg: search)
+    const isTextInputTarget = !!event?.target?.closest?.('input, textarea');
+
     if (
       `${FILE_EXPLORER_BODY_WRAPPER_ID}-${_focussedFileExplorerDeviceType}` ===
-      this.fileExplorerBodyWrapperId
+        this.fileExplorerBodyWrapperId &&
+      !isTextInputTarget
     ) {
       document.getElementById(this.fileExplorerBodyWrapperId).focus();
     }
@@ -281,9 +287,28 @@ class FileExplorerBodyRender extends PureComponent {
       isStatusBarEnabled,
       fileTransferClipboard,
       mtpDevice,
+      search,
+      searchFocusRequest,
+      onSearchQueryChange,
+      onSearchIncludeSubfoldersChange,
+      onSearchClose,
       ...parentProps
     } = this.props;
     const { directoryLists } = this.props;
+    const isSearchOpen = !!search?.isOpen;
+    const isSearchActive = isSearchOpen && search.query.trim() !== '';
+    let searchEmptyText = null;
+
+    if (isSearchActive) {
+      const isSearchPending =
+        search.includeSubfolders &&
+        search.status !== 'done' &&
+        search.status !== 'error';
+
+      searchEmptyText = isSearchPending
+        ? 'Searching…'
+        : 'No matching files or folders';
+    }
 
     const _eventTarget = 'tableWrapperTarget';
 
@@ -300,12 +325,23 @@ class FileExplorerBodyRender extends PureComponent {
         elevation={0}
         square
       >
+        {isSearchOpen && (
+          <FileExplorerSearchBar
+            search={search}
+            visibleCount={directoryLists[deviceType].nodes.length}
+            focusRequest={searchFocusRequest}
+            onQueryChange={onSearchQueryChange}
+            onIncludeSubfoldersChange={onSearchIncludeSubfoldersChange}
+            onClose={onSearchClose}
+          />
+        )}
         <div
           tabIndex={-1}
           id={this.fileExplorerBodyWrapperId}
           className={classNames(styles.tableWrapper, {
             [`onHoverDropZone`]: onHoverDropZoneActivate(deviceType),
             [`statusBarActive`]: isStatusBarEnabled,
+            [`searchBarActive`]: isSearchOpen,
           })}
           onContextMenu={(event) =>
             onContextMenuClick(event, {}, { ...this.tableData() }, _eventTarget)
@@ -321,6 +357,7 @@ class FileExplorerBodyRender extends PureComponent {
             currentBrowsePath={currentBrowsePath}
             onContextMenuClick={onContextMenuClick}
             mtpDevice={mtpDevice}
+            searchEmptyText={searchEmptyText}
             {...parentProps}
           />
         </div>
