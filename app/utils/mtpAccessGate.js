@@ -6,22 +6,18 @@
  *   in flight. Background work lists one directory per call, so a foreground
  *   call waits for at most one directory listing.
  * - Foreground calls never wait for each other (preserving the existing
- *   behaviour) but do wait for an in-flight background call to finish so the
- *   device is never driven concurrently by the two.
- * - That wait is capped, measured from when the background call started, so a
- *   hung background call can never block the UI for long.
+ *   behaviour) but always wait for an in-flight background call to finish, so
+ *   the device is never driven concurrently by the two. There is deliberately
+ *   no timeout: proceeding while a background call is still running would
+ *   overlap device access. A call that never returns means the device itself
+ *   is stuck, in which case the foreground call couldn't succeed either.
+ * - While a foreground call is waiting, no new background call can start.
  */
-const BACKGROUND_CALL_MAX_WAIT_MS = 20000;
-
 class MtpAccessGate {
   constructor() {
     this.foregroundCount = 0;
-    this.backgroundStartedAt = null;
+    this.backgroundBusy = false;
     this.waiters = [];
-  }
-
-  get backgroundBusy() {
-    return this.backgroundStartedAt !== null;
   }
 
   _notify() {
@@ -31,13 +27,9 @@ class MtpAccessGate {
     waiters.forEach((resolve) => resolve());
   }
 
-  _waitForChange(timeoutMs = null) {
+  _waitForChange() {
     return new Promise((resolve) => {
       this.waiters.push(resolve);
-
-      if (timeoutMs !== null) {
-        setTimeout(resolve, Math.max(0, timeoutMs));
-      }
     });
   }
 
@@ -46,15 +38,8 @@ class MtpAccessGate {
 
     try {
       while (this.backgroundBusy) {
-        const remaining =
-          this.backgroundStartedAt + BACKGROUND_CALL_MAX_WAIT_MS - Date.now();
-
-        if (remaining <= 0) {
-          break;
-        }
-
         // eslint-disable-next-line no-await-in-loop
-        await this._waitForChange(remaining);
+        await this._waitForChange();
       }
 
       return await fn();
@@ -70,12 +55,12 @@ class MtpAccessGate {
       await this._waitForChange();
     }
 
-    this.backgroundStartedAt = Date.now();
+    this.backgroundBusy = true;
 
     try {
       return await fn();
     } finally {
-      this.backgroundStartedAt = null;
+      this.backgroundBusy = false;
       this._notify();
     }
   }
