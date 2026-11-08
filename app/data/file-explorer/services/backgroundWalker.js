@@ -268,8 +268,17 @@ export const searchFiles = async ({
         return;
       }
 
-      const remaining = maxResults - found;
-      let nodes = matches.slice(0, remaining);
+      // Reserve result slots synchronously, before any await, so concurrent
+      // workers can't each see the same free slots and exceed [maxResults].
+      const reserved = Math.min(matches.length, maxResults - found);
+
+      if (reserved < 1) {
+        return;
+      }
+
+      found += reserved;
+
+      let nodes = matches.slice(0, reserved);
 
       if (deviceType === DEVICE_TYPE.local) {
         // background listings are minimal; build full nodes for display
@@ -286,7 +295,8 @@ export const searchFiles = async ({
         return;
       }
 
-      found += nodes.length;
+      // release the slots of entries that disappeared before being read
+      found -= reserved - nodes.length;
       onResults(nodes);
     },
   });
