@@ -17,6 +17,12 @@ const WALK_CONCURRENCY = {
   [DEVICE_TYPE.mtp]: 1,
 };
 
+// Photos app libraries are internal databases protected by the Photos
+// permission. Background work never goes inside them (search lists the
+// library itself as a match; folder sizes show it as unavailable).
+const isPhotosLibrary = (deviceType, name) =>
+  deviceType === DEVICE_TYPE.local && PHOTOS_LIBRARY_PATTERN.test(name);
+
 /**
  * A cancellation token shared by a background job and the code that started
  * it. Cancelling stops the walk before its next directory listing.
@@ -152,7 +158,7 @@ const walkTree = async ({
  * @param {CancelToken} token
  * @throws {DeviceChangedError}
  * @return {Promise<number|null|undefined>} size in bytes; null if the folder
- * couldn't be read; undefined if cancelled.
+ * couldn't be read (or is a Photos library); undefined if cancelled.
  */
 export const computeFolderSize = async ({
   deviceType,
@@ -168,6 +174,10 @@ export const computeFolderSize = async ({
     return cached;
   }
 
+  if (isPhotosLibrary(deviceType, folderPath.split('/').pop())) {
+    return null;
+  }
+
   const generation = folderSizeCache.generation(deviceType);
   let total = 0;
 
@@ -175,6 +185,7 @@ export const computeFolderSize = async ({
     rootPath: folderPath,
     token,
     concurrency: WALK_CONCURRENCY[deviceType],
+    shouldDescend: (entry) => !isPhotosLibrary(deviceType, entry.name),
     listDir: (dir) =>
       fileExplorerController.listFilesInBackground({
         deviceType,
@@ -236,11 +247,7 @@ export const searchFiles = async ({
     rootPath,
     token: walkToken,
     concurrency: WALK_CONCURRENCY[deviceType],
-    // Photos app libraries are internal databases protected by the Photos
-    // permission: list them as a match, but don't search inside
-    shouldDescend: (entry) =>
-      deviceType !== DEVICE_TYPE.local ||
-      !PHOTOS_LIBRARY_PATTERN.test(entry.name),
+    shouldDescend: (entry) => !isPhotosLibrary(deviceType, entry.name),
     listDir: (dir) =>
       fileExplorerController.listFilesInBackground({
         deviceType,
