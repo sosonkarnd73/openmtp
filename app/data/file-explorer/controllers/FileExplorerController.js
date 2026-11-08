@@ -9,10 +9,24 @@ import {
 import { getMtpModeSetting } from '../../../helpers/settings';
 import { DEVICE_TYPE } from '../../../enums';
 import { unixTimestampNow } from '../../../utils/date';
+import { mtpAccessGate } from '../../../utils/mtpAccessGate';
 
 class FileExplorerController {
   constructor() {
     this.repository = new FileExplorerRepository();
+  }
+
+  /**
+   * MTP calls go through [mtpAccessGate] so that background work (folder
+   * sizes, recursive search) never drives the device concurrently with
+   * user-initiated actions.
+   */
+  _foreground(deviceType, fn) {
+    if (deviceType === DEVICE_TYPE.mtp) {
+      return mtpAccessGate.runForeground(fn);
+    }
+
+    return fn();
   }
 
   async _sentEvent({ result, deviceType, eventKey, attachData = false }) {
@@ -129,7 +143,9 @@ class FileExplorerController {
   async initialize({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.initialize({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.initialize({ deviceType })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'INITIALIZE' });
 
@@ -144,7 +160,9 @@ class FileExplorerController {
   async dispose({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.dispose({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.dispose({ deviceType })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'DISPOSE' });
 
@@ -159,7 +177,9 @@ class FileExplorerController {
   async listStorages({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.listStorages({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.listStorages({ deviceType })
+    );
 
     this._sentEvent({
       result,
@@ -185,12 +205,14 @@ class FileExplorerController {
     checkIf(filePath, 'string');
     checkIf(ignoreHidden, 'boolean');
 
-    const result = await this.repository.listFiles({
-      deviceType,
-      filePath,
-      ignoreHidden,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.listFiles({
+        deviceType,
+        filePath,
+        ignoreHidden,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'LIST_FILES' });
 
@@ -211,12 +233,14 @@ class FileExplorerController {
     checkIf(filePath, 'string');
     checkIf(newFilename, 'string');
 
-    const result = await this.repository.renameFile({
-      deviceType,
-      filePath,
-      newFilename,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.renameFile({
+        deviceType,
+        filePath,
+        newFilename,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'RENAME_FILE' });
 
@@ -235,11 +259,13 @@ class FileExplorerController {
     checkIf(deviceType, 'string');
     checkIf(fileList, 'array');
 
-    const result = await this.repository.deleteFiles({
-      deviceType,
-      fileList,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.deleteFiles({
+        deviceType,
+        fileList,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'DELETE_FILE' });
 
@@ -258,11 +284,13 @@ class FileExplorerController {
     checkIf(deviceType, 'string');
     checkIf(filePath, 'string');
 
-    const result = await this.repository.makeDirectory({
-      deviceType,
-      filePath,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.makeDirectory({
+        deviceType,
+        filePath,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'NEW_FOLDER' });
 
@@ -281,11 +309,13 @@ class FileExplorerController {
     checkIf(deviceType, 'string');
     checkIf(fileList, 'array');
 
-    const result = await this.repository.filesExist({
-      deviceType,
-      fileList,
-      storageId,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.filesExist({
+        deviceType,
+        fileList,
+        storageId,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'FILES_EXIST' });
 
@@ -327,17 +357,19 @@ class FileExplorerController {
     checkIf(onProgress, 'function');
     checkIf(onCompleted, 'function');
 
-    const result = await this.repository.transferFiles({
-      deviceType,
-      destination,
-      fileList,
-      direction,
-      storageId,
-      onError,
-      onProgress,
-      onCompleted,
-      onPreprocess,
-    });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.transferFiles({
+        deviceType,
+        destination,
+        fileList,
+        direction,
+        storageId,
+        onError,
+        onProgress,
+        onCompleted,
+        onPreprocess,
+      })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'TRANSFER_FILES' });
 
@@ -353,7 +385,9 @@ class FileExplorerController {
   async fetchDebugReport({ deviceType }) {
     checkIf(deviceType, 'string');
 
-    const result = await this.repository.fetchDebugReport({ deviceType });
+    const result = await this._foreground(deviceType, () =>
+      this.repository.fetchDebugReport({ deviceType })
+    );
 
     this._sentEvent({ result, deviceType, eventKey: 'FETCH_DEBUG_REPORT' });
 
