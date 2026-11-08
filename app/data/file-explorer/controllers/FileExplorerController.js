@@ -10,6 +10,7 @@ import { getMtpModeSetting } from '../../../helpers/settings';
 import { DEVICE_TYPE } from '../../../enums';
 import { unixTimestampNow } from '../../../utils/date';
 import { mtpAccessGate } from '../../../utils/mtpAccessGate';
+import { folderSizeCache } from '../services/folderSizeCache';
 
 class FileExplorerController {
   constructor() {
@@ -242,6 +243,8 @@ class FileExplorerController {
       })
     );
 
+    folderSizeCache.invalidate(deviceType);
+
     this._sentEvent({ result, deviceType, eventKey: 'RENAME_FILE' });
 
     return result;
@@ -267,6 +270,8 @@ class FileExplorerController {
       })
     );
 
+    folderSizeCache.invalidate(deviceType);
+
     this._sentEvent({ result, deviceType, eventKey: 'DELETE_FILE' });
 
     return result;
@@ -291,6 +296,8 @@ class FileExplorerController {
         storageId,
       })
     );
+
+    folderSizeCache.invalidate(deviceType);
 
     this._sentEvent({ result, deviceType, eventKey: 'NEW_FOLDER' });
 
@@ -357,6 +364,18 @@ class FileExplorerController {
     checkIf(onProgress, 'function');
     checkIf(onCompleted, 'function');
 
+    // A transfer changes the contents of both sides. The data sources call
+    // [onCompleted]/[onError] *before* the returned promise resolves, and the
+    // UI re-lists the destination from those callbacks, so the folder size
+    // cache has to be invalidated inside them, not only after the await.
+    let callbackFired = false;
+    const invalidateFolderSizes = () => {
+      folderSizeCache.invalidate(DEVICE_TYPE.local);
+      folderSizeCache.invalidate(DEVICE_TYPE.mtp);
+    };
+
+    invalidateFolderSizes();
+
     const result = await this._foreground(deviceType, () =>
       this.repository.transferFiles({
         deviceType,
@@ -364,12 +383,30 @@ class FileExplorerController {
         fileList,
         direction,
         storageId,
-        onError,
+        onError: (...args) => {
+          // a failed transfer may still have copied some of the files
+          callbackFired = true;
+          invalidateFolderSizes();
+
+          return onError(...args);
+        },
         onProgress,
-        onCompleted,
+        onCompleted: (...args) => {
+          callbackFired = true;
+          invalidateFolderSizes();
+
+          return onCompleted(...args);
+        },
         onPreprocess,
       })
     );
+
+    // Some failures resolve without calling either callback. Otherwise don't
+    // invalidate again: that would discard the fresh sizes the post-transfer
+    // listing (started from the callback) is computing right now.
+    if (!callbackFired) {
+      invalidateFolderSizes();
+    }
 
     this._sentEvent({ result, deviceType, eventKey: 'TRANSFER_FILES' });
 
